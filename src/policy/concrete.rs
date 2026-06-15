@@ -622,8 +622,7 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
         // Stopping condition: When NONE of the inputs can be further enumerated.
         'outer: loop {
             //--- FIND a plausible node ---
-            let mut prob: Reverse<PositiveF64> = Reverse(PositiveF64(0.0));
-            let mut curr_policy: Arc<Self> = Arc::new(Self::Unsatisfiable);
+            let mut found: Option<(Reverse<PositiveF64>, Arc<Self>)> = None;
             let mut curr_pol_replace_vec: Vec<(PositiveF64, Arc<Self>)> = vec![];
             let mut no_more_enum = false;
 
@@ -637,8 +636,7 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
 
                 if prev_len < enum_len {
                     // Plausible node found
-                    prob = *p;
-                    curr_policy = Arc::clone(pol);
+                    found = Some((*p, Arc::clone(pol)));
                     break 'inner;
                 } else if i == tapleaf_prob_vec.len() - 1 {
                     // No enumerable node found i.e. STOP
@@ -664,6 +662,7 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
             // with children nodes
 
             // Remove current node
+            let (prob, curr_policy) = found.expect("no_more_enum would be set if this were None");
             assert!(tapleaf_prob_vec.remove(&(prob, curr_policy.clone())));
             pol_prob_map.remove(&curr_policy);
 
@@ -1159,8 +1158,8 @@ fn with_huffman_tree<Pk: MiniscriptKey>(
         let (p1, s1) = node_weights.pop().expect("len must at least be two");
         let (p2, s2) = node_weights.pop().expect("len must at least be two");
 
-        let p = (p1.0).0 + (p2.0).0;
-        node_weights.push((Reverse(PositiveF64(p)), TapTree::combine(s1, s2)?));
+        let p = p1.0 + p2.0;
+        node_weights.push((Reverse(p), TapTree::combine(s1, s2)?));
     }
 
     debug_assert!(node_weights.len() == 1);

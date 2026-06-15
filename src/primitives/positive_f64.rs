@@ -9,7 +9,7 @@ use crate::Threshold;
 
 /// Ordered f64 for comparison.
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub struct PositiveF64(pub f64);
+pub struct PositiveF64(f64);
 
 impl PositiveF64 {
     /// The constant one.
@@ -18,6 +18,12 @@ impl PositiveF64 {
     /// Constant used in unit tsets
     #[cfg(test)]
     pub const ONE_QUARTER: Self = Self(0.25);
+
+    /// Attempts to create a [`PositiveF64`] from an ordinary `f64`.
+    pub fn new(f: f64) -> Option<Self> {
+        // Can likely make this function const in Rust 1.83
+        (f > 0.0).then_some(Self(f))
+    }
 
     /// Given an [`Option<PositiveF64>`], if it is `Some` then add it to the value.
     /// Otherwise return the unmodified value.
