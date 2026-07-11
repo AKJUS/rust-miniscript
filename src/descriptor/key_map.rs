@@ -475,4 +475,23 @@ mod tests {
             "SHOULD get NO private key when the requested path does not match the descriptor"
         );
     }
+
+    // Master xprv in the descriptor must not sign sibling paths (`/9/7` vs `/0/*`).
+    #[test]
+    fn get_key_bip32_rejects_sibling_with_master_xprv() {
+        let secp = Secp256k1::new();
+        let master_xprv = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
+            .parse::<Xpriv>()
+            .unwrap();
+        let fp = master_xprv.fingerprint(&secp);
+        let account_path: DerivationPath = "86h/1h/0h".parse().unwrap();
+        let descriptor = format!("tr({master_xprv}/{account_path}/0/*)");
+        let request_path: DerivationPath = format!("{account_path}/9/7").parse().unwrap();
+        let key_request = KeyRequest::Bip32((fp, request_path));
+        let (_, keymap) = Descriptor::parse_descriptor(&secp, &descriptor).unwrap();
+        let result = keymap
+            .get_key(key_request, &secp)
+            .expect("key lookup should not fail");
+        assert!(result.is_none(), "expected no matching key, got: {result:?}");
+    }
 }
