@@ -8,6 +8,10 @@ on:   # yamllint disable-line rule:truthy
 
 name: Continuous integration
 
+# Avoids CI runner disk space logs fill up
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
 jobs:
   Stable:                       # 2 jobs, one per lock file.
     name: Test - stable toolchain
@@ -69,7 +73,7 @@ jobs:
         run: cargo rbmt lint
 
   Docs:
-    name: Docs - stable toolchain
+    name: Docs
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -78,17 +82,6 @@ jobs:
       - uses: ./.github/actions/setup-rbmt
       - name: "Build docs"
         run: cargo rbmt docs
-
-  Docsrs:
-    name: Docs - nightly toolchain
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-rbmt
-      - name: "Build docs.rs docs"
-        run: cargo rbmt docsrs
 
   Bench:
     name: Bench - nightly toolchain
