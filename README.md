@@ -57,6 +57,10 @@ We use a custom Rust compiler configuration conditional to guard the bench mark 
 benchmarks use: `RUSTFLAGS='--cfg=bench' cargo +nightly bench benchmarks`.
 
 
+## Other Resources
+
+An [ANTLR4 grammar](https://github.com/antlr/grammars-v4/tree/master/miniscript) for Miniscript expressions is available in the ANTLR `grammars-v4` repository.
+
 ## Release Notes
 
 See [CHANGELOG.md](CHANGELOG.md).
