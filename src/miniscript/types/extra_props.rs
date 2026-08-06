@@ -360,8 +360,9 @@ impl ExtData {
                 max_exec_op_count: 0,
             }),
             dissat_data: Some(SatData {
+                // A hash dissatisfaction is a single 32-byte element.
                 max_witness_stack_size: 33,
-                max_witness_stack_count: 2,
+                max_witness_stack_count: 1,
                 max_script_sig_size: 33,
                 max_exec_stack_count: 2, // either size <32> or <sha256> <32 byte>
                 max_exec_op_count: 0,
@@ -385,8 +386,9 @@ impl ExtData {
                 max_exec_op_count: 0,
             }),
             dissat_data: Some(SatData {
+                // A hash dissatisfaction is a single 32-byte element.
                 max_witness_stack_size: 33,
-                max_witness_stack_count: 2,
+                max_witness_stack_count: 1,
                 max_script_sig_size: 33,
                 max_exec_stack_count: 2, // either size <32> or <sha256> <32 byte>
                 max_exec_op_count: 0,
@@ -410,8 +412,9 @@ impl ExtData {
                 max_exec_op_count: 0,
             }),
             dissat_data: Some(SatData {
+                // A hash dissatisfaction is a single 32-byte element.
                 max_witness_stack_size: 33,
-                max_witness_stack_count: 2,
+                max_witness_stack_count: 1,
                 max_script_sig_size: 33,
                 max_exec_stack_count: 2, // either size <32> or <sha256> <32 byte>
                 max_exec_op_count: 0,
@@ -435,8 +438,9 @@ impl ExtData {
                 max_exec_op_count: 0,
             }),
             dissat_data: Some(SatData {
+                // A hash dissatisfaction is a single 32-byte element.
                 max_witness_stack_size: 33,
-                max_witness_stack_count: 2,
+                max_witness_stack_count: 1,
                 max_script_sig_size: 33,
                 max_exec_stack_count: 2, // either size <32> or <sha256> <32 byte>
                 max_exec_op_count: 0,
@@ -542,8 +546,11 @@ impl ExtData {
             has_free_verify: false,
             static_ops: 3 + self.static_ops,
             sat_data: self.sat_data.map(|data| SatData {
-                max_witness_stack_size: data.max_witness_stack_size + 1,
-                max_witness_stack_count: data.max_witness_stack_count + 2,
+                // The satisfaction pushes a single element holding 0x01, which
+                // is two bytes in a witness (its length prefix and the byte
+                // itself) and one byte in a scriptsig (OP_1).
+                max_witness_stack_size: data.max_witness_stack_size + 2,
+                max_witness_stack_count: data.max_witness_stack_count + 1,
                 max_script_sig_size: data.max_script_sig_size + 1,
                 // Note: in practice this cmp::max always evaluates to data.max_exec_stack_count.
                 max_exec_stack_count: cmp::max(1, data.max_exec_stack_count),
