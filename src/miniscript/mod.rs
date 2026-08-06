@@ -2206,4 +2206,48 @@ mod tests {
             "The Miniscript corresponding Script cannot be larger than 10000 bytes, but got 10275 bytes."
         );
     }
+    #[test]
+    fn satisfaction_size_matches_template() {
+        // The satisfaction sizes stored in `ExtData` must agree with the
+        // witness template the satisfier produces, whose elements are sized by
+        // `Placeholder::size`.
+        //
+        // A `d:` satisfaction pushes a single `<1>` element, which takes two
+        // bytes on the witness stack (its length prefix plus the byte itself),
+        // and dissatisfying a hash fragment pushes a single 32-byte element.
+        struct HasSigFor(bitcoin::PublicKey);
+
+        impl crate::plan::AssetProvider<bitcoin::PublicKey> for HasSigFor {
+            fn provider_lookup_ecdsa_sig(&self, pk: &bitcoin::PublicKey) -> bool { *pk == self.0 }
+
+            fn check_older(&self, _: bitcoin::relative::LockTime) -> bool { true }
+        }
+
+        let keys = pubkeys(2);
+        let hash = sha256::Hash::hash(&[]);
+
+        for ms_str in [
+            // The `<1>` of the `d:` wrapper is the whole satisfaction.
+            "dv:older(144)".to_owned(),
+            // Only the second key can sign and the preimage is unknown, so the
+            // satisfaction dissatisfies the hash and signs with that key.
+            format!("andor(sha256({}),pk({}),pk({}))", hash, keys[0], keys[1]),
+        ] {
+            let ms = Segwitv0Script::from_str_insane(&ms_str).unwrap();
+            let template = ms.build_template(&HasSigFor(keys[1]));
+            let stack = match template.stack {
+                crate::miniscript::satisfy::Witness::Stack(stack) => stack,
+                _ => panic!("{} should be satisfiable", ms_str),
+            };
+
+            let size: usize = stack.iter().map(crate::util::ItemSize::size).sum();
+            assert_eq!(ms.max_satisfaction_size().unwrap(), size, "{}", ms_str);
+            assert_eq!(
+                ms.max_satisfaction_witness_elements().unwrap(),
+                stack.len() + 1,
+                "{}",
+                ms_str
+            );
+        }
+    }
 }
