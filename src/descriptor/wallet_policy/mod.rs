@@ -379,7 +379,7 @@ pub enum WalletPolicyError {
     KeyExpressionParseMustHaveDerivPath,
     /// The KeyIndex is missing an '@' sign
     KeyIndexParseExpectedAtSign(char),
-    /// The KeyIndex is not a valid unsigned integer
+    /// The key index after '@' is not a decimal number with no leading zeros
     KeyIndexParseInvalidIndex(String),
     /// The key info is not found for the given index
     KeyInfoInvalidKeyIndex(usize),
@@ -393,7 +393,8 @@ pub enum WalletPolicyError {
     TemplateValidationKeyIndexOutOfOrder,
     /// The key indexes in the template are the same but the paths are non-disjoint
     TemplateValidationNonDisjointPaths,
-    /// A key placeholder is not followed by "/**" or "/<NUM;NUM>/*"
+    /// A key placeholder is not followed by "/**" or "/<NUM;NUM>/*" with two
+    /// distinct canonical unhardened NUMs
     TemplateValidationInvalidPlaceholderDeriv,
     /// There must be at least one derivation path for a xpub
     TranslatorEmptyDerivationPaths,
@@ -423,7 +424,10 @@ impl Display for WalletPolicyError {
                 write!(f, "Key expression placeholder must have a derivation path after it")
             }
             Self::KeyIndexParseInvalidIndex(index_str) => {
-                write!(f, "Couldn't parse index, got {index_str}")
+                write!(
+                    f,
+                    "Key index must be a decimal number with no leading zeros, got {index_str}"
+                )
             }
             Self::KeyIndexParseExpectedAtSign(ch) => {
                 write!(f, "Expected KeyIndex '@' sign, got {ch}")
@@ -450,7 +454,11 @@ impl Display for WalletPolicyError {
                 write!(f, "The template has identical indexes but the paths are non-disjoint")
             }
             Self::TemplateValidationInvalidPlaceholderDeriv => {
-                write!(f, "Key placeholders must be followed by \"/**\" or \"/<NUM;NUM>/*\"")
+                write!(
+                    f,
+                    "Key placeholders must be followed by \"/**\" or \"/<NUM;NUM>/*\" \
+                     with two distinct unhardened NUMs"
+                )
             }
             Self::TranslatorEmptyDerivationPaths => {
                 write!(f, "Expected derivation paths when translating into KeyExpression")
@@ -565,6 +573,18 @@ mod tests {
 
     // Allowed cardinality > 2
     "pkh(@0/<0;1;2>/*)",
+
+    // Key placeholder index with a leading zero, or with trailing garbage
+    "pkh(@00/**)",
+    "pkh(@0abc/**)",
+
+    // Non-canonical NUMs (leading zero or sign) in a placeholder derivation,
+    // a repeated NUM, and a "**" that is not a whole path step
+    "pkh(@0/<00;1>/*)",
+    "pkh(@0/<0;01>/*)",
+    "pkh(@0/<+0;1>/*)",
+    "pkh(@0/<0;0>/*)",
+    "pkh(@0/1**)",
 
     // Derivation before aggregation is not allowed in wallet policies (despite
         // being allowed in BIP-390)
