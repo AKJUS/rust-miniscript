@@ -1270,6 +1270,17 @@ mod compiler_tests {
     use super::*;
     use crate::policy::Concrete;
 
+    fn nested_equal_odds_policy(n_keys: usize) -> Policy<String> {
+        assert!(n_keys >= 2);
+
+        let mut source = format!("pk(K{})", n_keys - 1);
+        for i in (0..n_keys - 1).rev() {
+            source = format!("or(1@pk(K{i}),1@{source})");
+        }
+
+        Policy::from_str(&source).expect("generated policy must parse")
+    }
+
     #[test]
     fn test_gen_comb() {
         let policies: Vec<Arc<Concrete<String>>> = vec!["pk(A)", "pk(B)", "pk(C)", "pk(D)"]
@@ -1318,6 +1329,36 @@ mod compiler_tests {
         let desc = policy.compile_tr(None).unwrap();
         // pk(A) promoted to the internal key, leaving the script tree empty
         assert_eq!(desc.to_string(), "tr(A)#xyg3grex");
+    }
+
+    #[test]
+    #[should_panic(expected = "compiler produces sane output")] // will be fixed in next commit
+    fn uncompressed_key_error() {
+        let uncompressed = bitcoin::PublicKey::from_str(
+            "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\
+             483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8",
+        )
+        .unwrap();
+        let policy = Policy::<bitcoin::PublicKey>::Trivial;
+
+        assert!(policy.compile_tr(Some(uncompressed)).is_err());
+        assert!(policy.compile_tr_native(Some(uncompressed), 128).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "huffman tree cannot produce depth > 128 given sane weights")] // will be fixed in next commit
+    fn huffman_depth_error() {
+        // Nesting produces geometrically decreasing Tapleaf probabilities without exceeding the
+        // parser's integer limit.
+        let policy = nested_equal_odds_policy(131);
+        // Selecting an internal key leaves 130 script-path leaves. The weighted Huffman tree
+        // reaches depth 129 and exceeds the TapTree depth limit.
+        assert!(policy.compile_tr(None).is_err());
+        assert!(policy.compile_tr_native(None, 1024).is_err());
+        assert!(matches!(
+            policy.compile_tr_private_experimental(None),
+            Err(Error::TapTreeDepthError(_))
+        ));
     }
 
     #[test]
