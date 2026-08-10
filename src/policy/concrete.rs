@@ -1342,8 +1342,14 @@ mod compiler_tests {
         .unwrap();
         let policy = Policy::<bitcoin::PublicKey>::Trivial;
 
-        assert!(policy.compile_tr(Some(uncompressed)).is_err());
-        assert!(policy.compile_tr_native(Some(uncompressed), 128).is_err());
+        assert!(matches!(
+            policy.compile_tr(Some(uncompressed)),
+            Err(CompilerError::UncompressedTaprootInternalKey)
+        ));
+        assert!(matches!(
+            policy.compile_tr_native(Some(uncompressed), 128),
+            Err(CompilerError::UncompressedTaprootInternalKey)
+        ));
     }
 
     #[test]
@@ -1353,8 +1359,11 @@ mod compiler_tests {
         let policy = nested_equal_odds_policy(131);
         // Selecting an internal key leaves 130 script-path leaves. The weighted Huffman tree
         // reaches depth 129 and exceeds the TapTree depth limit.
-        assert!(policy.compile_tr(None).is_err());
-        assert!(policy.compile_tr_native(None, 1024).is_err());
+        assert!(matches!(policy.compile_tr(None), Err(CompilerError::HuffmanTreeDepthExceeded)));
+        assert!(matches!(
+            policy.compile_tr_native(None, 1024),
+            Err(CompilerError::HuffmanTreeDepthExceeded)
+        ));
         assert!(matches!(
             policy.compile_tr_private_experimental(None),
             Err(Error::TapTreeDepthError(_))
