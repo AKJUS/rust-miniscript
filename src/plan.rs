@@ -532,8 +532,10 @@ fn is_key_direct_child_of(
         }
 
         let definite_path_len = pk_derivation_path.len();
-        if derivation_path.as_ref() == &pk_derivation_path[..(definite_path_len - 1)] {
-            return true;
+        if let Some(parent_path_len) = definite_path_len.checked_sub(1) {
+            if derivation_path.as_ref() == &pk_derivation_path[..parent_path_len] {
+                return true;
+            }
         }
     }
 
@@ -1242,5 +1244,20 @@ mod test {
                 4
             )
         );
+    }
+
+    #[test]
+    fn raw_key_empty_path_does_not_panic() {
+        let asset_key = DescriptorPublicKey::from_str(
+            "[0d2a9f1a/1]02244fccfacfccf7a6de0b9e7d8a1376acf3b1d3c573b973eaa601fde25c50b956",
+        )
+        .unwrap();
+        let assets = Assets::from_iter([asset_key]);
+        let desc = Descriptor::<DefiniteDescriptorKey>::from_str(
+            "wsh(pk(02a71967cb7bcd569e6768f393e660d6773013a1099e1352c0487ffd7a4c78c87e))",
+        )
+        .unwrap();
+
+        assert!(desc.into_plan(&assets).is_err());
     }
 }
