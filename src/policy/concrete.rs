@@ -10,7 +10,7 @@ use std::error;
 use bitcoin::absolute;
 #[cfg(feature = "compiler")]
 use {
-    crate::descriptor::TapTree,
+    crate::descriptor::{TapTree, TapTreeDepthError},
     crate::miniscript::ScriptContext,
     crate::policy::compiler::{self, CompilerError, OrdF64},
     crate::Descriptor,
@@ -301,7 +301,8 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
                                 leaf_compilations.push((OrdF64(prob), compilation));
                             }
                             if !leaf_compilations.is_empty() {
-                                let tap_tree = with_huffman_tree::<Pk>(leaf_compilations);
+                                let tap_tree = with_huffman_tree::<Pk>(leaf_compilations)
+                                    .map_err(|_| CompilerError::HuffmanTreeDepthExceeded)?;
                                 Some(tap_tree)
                             } else {
                                 // no policies remaining once the extracted key is skipped
@@ -310,7 +311,7 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
                         }
                     },
                 )
-                .expect("compiler produces sane output");
+                .map_err(|_| CompilerError::UncompressedTaprootInternalKey)?;
                 Ok(tree)
             }
         }
@@ -364,14 +365,17 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
                             leaf_compilations.push((OrdF64(*prob), compilation));
                         }
                         if !leaf_compilations.is_empty() {
-                            Some(with_huffman_tree::<Pk>(leaf_compilations))
+                            Some(
+                                with_huffman_tree::<Pk>(leaf_compilations)
+                                    .map_err(|_| CompilerError::HuffmanTreeDepthExceeded)?,
+                            )
                         } else {
                             None
                         }
                     }
                 };
                 let tree = Descriptor::new_tr(internal_key, tap_tree)
-                    .expect("compiler produces sane output");
+                    .map_err(|_| CompilerError::UncompressedTaprootInternalKey)?;
                 Ok(tree)
             }
         }
@@ -425,7 +429,7 @@ impl<Pk: MiniscriptKey> Policy<Pk> {
                                 .collect();
 
                             if !leaf_compilations.is_empty() {
-                                let tap_tree = with_huffman_tree::<Pk>(leaf_compilations);
+                                let tap_tree = with_huffman_tree::<Pk>(leaf_compilations)?;
                                 Some(tap_tree)
                             } else {
                                 // no policies remaining once the extracted key is skipped
@@ -1137,7 +1141,9 @@ fn has_if_fragment<Pk: MiniscriptKey>(ms: &Miniscript<Pk, Tap>) -> bool {
 
 /// Creates a Huffman Tree from compiled [`Miniscript`] nodes.
 #[cfg(feature = "compiler")]
-fn with_huffman_tree<Pk: MiniscriptKey>(ms: Vec<(OrdF64, Miniscript<Pk, Tap>)>) -> TapTree<Pk> {
+fn with_huffman_tree<Pk: MiniscriptKey>(
+    ms: Vec<(OrdF64, Miniscript<Pk, Tap>)>,
+) -> Result<TapTree<Pk>, TapTreeDepthError> {
     let mut node_weights = BinaryHeap::<(Reverse<OrdF64>, TapTree<Pk>)>::new();
     for (prob, script) in ms {
         node_weights.push((Reverse(prob), TapTree::leaf(script)));
@@ -1148,18 +1154,14 @@ fn with_huffman_tree<Pk: MiniscriptKey>(ms: Vec<(OrdF64, Miniscript<Pk, Tap>)>) 
         let (p2, s2) = node_weights.pop().expect("len must at least be two");
 
         let p = (p1.0).0 + (p2.0).0;
-        node_weights.push((
-            Reverse(OrdF64(p)),
-            TapTree::combine(s1, s2)
-                .expect("huffman tree cannot produce depth > 128 given sane weights"),
-        ));
+        node_weights.push((Reverse(OrdF64(p)), TapTree::combine(s1, s2)?));
     }
 
     debug_assert!(node_weights.len() == 1);
-    node_weights
+    Ok(node_weights
         .pop()
         .expect("huffman tree algorithm is broken")
-        .1
+        .1)
 }
 
 /// Enumerates a [`Policy::Thresh(k, ..n..)`] into `n` different thresh's.
@@ -1270,6 +1272,17 @@ mod compiler_tests {
     use super::*;
     use crate::policy::Concrete;
 
+    fn nested_equal_odds_policy(n_keys: usize) -> Policy<String> {
+        assert!(n_keys >= 2);
+
+        let mut source = format!("pk(K{})", n_keys - 1);
+        for i in (0..n_keys - 1).rev() {
+            source = format!("or(1@pk(K{i}),1@{source})");
+        }
+
+        Policy::from_str(&source).expect("generated policy must parse")
+    }
+
     #[test]
     fn test_gen_comb() {
         let policies: Vec<Arc<Concrete<String>>> = vec!["pk(A)", "pk(B)", "pk(C)", "pk(D)"]
@@ -1318,6 +1331,43 @@ mod compiler_tests {
         let desc = policy.compile_tr(None).unwrap();
         // pk(A) promoted to the internal key, leaving the script tree empty
         assert_eq!(desc.to_string(), "tr(A)#xyg3grex");
+    }
+
+    #[test]
+    fn uncompressed_key_error() {
+        let uncompressed = bitcoin::PublicKey::from_str(
+            "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\
+             483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8",
+        )
+        .unwrap();
+        let policy = Policy::<bitcoin::PublicKey>::Trivial;
+
+        assert!(matches!(
+            policy.compile_tr(Some(uncompressed)),
+            Err(CompilerError::UncompressedTaprootInternalKey)
+        ));
+        assert!(matches!(
+            policy.compile_tr_native(Some(uncompressed), 128),
+            Err(CompilerError::UncompressedTaprootInternalKey)
+        ));
+    }
+
+    #[test]
+    fn huffman_depth_error() {
+        // Nesting produces geometrically decreasing Tapleaf probabilities without exceeding the
+        // parser's integer limit.
+        let policy = nested_equal_odds_policy(131);
+        // Selecting an internal key leaves 130 script-path leaves. The weighted Huffman tree
+        // reaches depth 129 and exceeds the TapTree depth limit.
+        assert!(matches!(policy.compile_tr(None), Err(CompilerError::HuffmanTreeDepthExceeded)));
+        assert!(matches!(
+            policy.compile_tr_native(None, 1024),
+            Err(CompilerError::HuffmanTreeDepthExceeded)
+        ));
+        assert!(matches!(
+            policy.compile_tr_private_experimental(None),
+            Err(Error::TapTreeDepthError(_))
+        ));
     }
 
     #[test]

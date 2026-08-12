@@ -57,6 +57,11 @@ pub enum CompilerError {
     /// In a Taproot compilation, no "unspendable key" was provided and no in-policy
     /// key could be used as an internal key.
     NoInternalKey,
+    /// The selected Taproot internal key is uncompressed.
+    UncompressedTaprootInternalKey,
+    /// A Huffman merge during Taproot compilation would place a leaf beyond
+    /// Taproot's maximum tree depth.
+    HuffmanTreeDepthExceeded,
     /// When compiling to Taproot, policy had too many Tapleaves
     TooManyTapleaves {
         /// Number of Tapleaves inferred from the policy.
@@ -88,6 +93,12 @@ impl fmt::Display for CompilerError {
                 "At least one spending path has exceeded the standardness or consensus limits",
             ),
             Self::NoInternalKey => f.write_str("Taproot compilation had no internal key available"),
+            Self::UncompressedTaprootInternalKey => {
+                f.write_str("Taproot compilation selected an uncompressed internal key")
+            }
+            Self::HuffmanTreeDepthExceeded => {
+                f.write_str("Taproot Huffman tree construction would exceed maximum depth 128")
+            }
             Self::TooManyTapleaves { n, max } => {
                 write!(f, "Policy had too many Tapleaves (found {}, maximum {})", n, max)
             }
@@ -116,6 +127,8 @@ impl error::Error for CompilerError {
             | ImpossibleNonMalleableCompilation
             | LimitsExceeded
             | NoInternalKey
+            | UncompressedTaprootInternalKey
+            | HuffmanTreeDepthExceeded
             | TooManyTapleaves { .. }
             | IfFragmentInNativeLeaf { .. } => None,
             PolicyError(e) => Some(e),
