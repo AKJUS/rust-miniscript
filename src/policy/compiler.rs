@@ -6,7 +6,7 @@
 //!
 
 use core::num::NonZeroU32;
-use core::{f64, fmt, mem};
+use core::{fmt, mem};
 #[cfg(feature = "std")]
 use std::error;
 
