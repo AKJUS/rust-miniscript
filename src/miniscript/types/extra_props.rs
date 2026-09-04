@@ -901,7 +901,7 @@ impl ExtData {
                     .rev()
                     .enumerate()
                     .try_fold(0, |acc, (i, &(sat, dissat))| {
-                        if i <= k {
+                        if i < k {
                             sat.map(|x| cmp(acc, proj(x)))
                         } else {
                             dissat.map(|y| cmp(acc, proj(y)))

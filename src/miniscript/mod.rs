@@ -2113,6 +2113,23 @@ mod tests {
     }
 
     #[test]
+    fn test_thresh_sat_data_exact_k_satisfactions() {
+        let ms =
+            Miniscript::<String, Segwitv0>::from_str_insane("thresh(1,pk(A),s:pk(B))").unwrap();
+        let sat = ms.ext.sat_data.expect("thresh(1,...) is satisfiable");
+        assert_eq!(sat.max_witness_stack_size, 74);
+        assert_eq!(sat.max_witness_stack_count, 2);
+        assert_eq!(sat.max_script_sig_size, 74);
+
+        let ms = Miniscript::<String, Segwitv0>::from_str_insane("thresh(2,pk(A),s:pk(B),a:pk(C))")
+            .unwrap();
+        let sat = ms.ext.sat_data.expect("thresh(2,...) is satisfiable");
+        assert_eq!(sat.max_witness_stack_size, 147);
+        assert_eq!(sat.max_witness_stack_count, 3);
+        assert_eq!(sat.max_script_sig_size, 147);
+    }
+
+    #[test]
     fn test_context_global_consensus() {
         // Test from string tests
         type LegacyMs = Miniscript<String, Legacy>;
